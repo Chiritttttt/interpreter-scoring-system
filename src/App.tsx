@@ -1,11 +1,13 @@
+import { supabase, signOut } from './lib/supabase';
+import { AuthPage } from './components/AuthPage';
 import React, { useState, useEffect } from 'react';
 import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive } from 'lucide-react';
 import type { PracticeMaterial } from './types';
 import { TopicManager } from './components/TopicManager';
 import { PracticeSession } from './components/PracticeSession';
 import { HistoryView } from './components/HistoryView';
-import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession } from './lib/db';
-
+import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession } from './lib/dbCloud.ts';
+import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive, LogOut } from 'lucide-react';
 type View = 'topics' | 'practice' | 'history' | 'settings';
 
 function App() {
@@ -13,10 +15,28 @@ function App() {
   const [selectedMaterial, setSelectedMaterial] = useState<PracticeMaterial | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
 
   useEffect(() => {
-    initDB().then(() => setIsLoading(false));
-  }, []);
+  // 检查登录状态
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setUser(session?.user ?? null);
+    setAuthLoading(false);
+  });
+
+  // 监听登录状态变化
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user ?? null);
+  });
+
+  return () => subscription.unsubscribe();
+}, []);
+
+  useEffect(() => {
+  initDB().then(() => setIsLoading(false));
+}, []);
 
   const handleSelectMaterial = (material: PracticeMaterial) => {
     setSelectedMaterial(material);
@@ -27,6 +47,18 @@ function App() {
     setSelectedMaterial(null);
     setCurrentView('topics');
   };
+
+  if (authLoading) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white" />
+    </div>
+  );
+}
+
+if (!user) {
+  return <AuthPage onSuccess={() => {}} />;
+}
 
   if (isLoading) {
     return (
@@ -93,6 +125,16 @@ function App() {
             </div>
             <div className="text-sm">
               <div className="font-medium">AI 评分已启用</div>
+              <button
+  onClick={async () => {
+    await signOut();
+    setUser(null);
+  }}
+  className="w-full mt-2 flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl text-indigo-200 hover:bg-white/20 transition text-sm"
+>
+  <LogOut className="w-4 h-4" />
+  <span>退出登录</span>
+</button>
               <div className="text-indigo-200 text-xs">语音识别就绪</div>
             </div>
           </div>

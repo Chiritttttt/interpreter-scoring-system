@@ -7,7 +7,7 @@ import type { PracticeMaterial, PracticeSession as Session, ScoreResult } from '
 import { AudioRecorder, blobToBase64 } from '../lib/recorder';
 import { SpeechRecognizer, TextToSpeech, whisperTranscribe } from '../lib/speech';
 import { calculateScore, buildScoreFromAI } from '../lib/scoring';
-import * as db from '../lib/db';
+import * as db from '../lib/dbCloud.ts';
 import { ScoreDisplay } from './ScoreDisplay';
 import { AutoPauseController } from '../lib/autoPause';
 import {
@@ -323,7 +323,7 @@ export function PracticeSession({ material, onBack }: Props) {
     setState('playing');
     const mediaEl = material.type === 'audio' ? mediaAudioRef.current : mediaVideoRef.current;
     if (mediaEl && material.mediaBlob) {
-      mediaEl.src = material.mediaBlob;
+      mediaEl.src = material.mediaUrl || material.mediaBlob || '';
       await mediaEl.play();
 
       if (material.interpretationType === 'consecutive' || material.interpretationType === 'simultaneous') {
@@ -509,13 +509,13 @@ export function PracticeSession({ material, onBack }: Props) {
               </div>
             )}
 
-            {material.type === 'video' && material.mediaBlob && (
+            {material.type === 'video' && (material.mediaUrl || material.mediaBlob) && (
               <div className="bg-black rounded-xl overflow-hidden">
                 <video ref={mediaVideoRef} className="w-full" controls onEnded={handleMediaEnded} />
               </div>
             )}
 
-            {material.type === 'audio' && material.mediaBlob && (
+            {material.type === 'audio' && (material.mediaUrl || material.mediaBlob) && (
               <div className="bg-gray-100 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
                   <Volume2 className="w-4 h-4" />

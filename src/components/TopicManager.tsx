@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Folder, Trash2, Edit2, FileText, AudioLines, Video } from 'lucide-react';
 import type { Topic, PracticeMaterial } from '../types';
-import * as db from '../lib/db';
+import * as db from '../lib/dbCloud.ts';
+import { uploadMediaToOSS } from '../lib/storage';
 
 interface Props {
   onSelectMaterial: (material: PracticeMaterial) => void;
@@ -321,6 +322,8 @@ function MaterialImportModal({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'text' | 'audio' | 'video'>('audio');
   const [interpretationType, setInterpretationType] = useState<'consecutive' | 'simultaneous' | 'sight' | 'self-paced'>('consecutive');
@@ -341,29 +344,35 @@ function MaterialImportModal({
       alert('纯文本模式请填写原文内容'); return;
     }
 
-    let mediaBlob: string | undefined;
-    if (mediaFile) {
-      mediaBlob = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(mediaFile);
-      });
-    }
+    let mediaUrl: string | undefined;
+if (mediaFile) {
+  setUploading(true);
+  try {
+    mediaUrl = await uploadMediaToOSS(mediaFile, setUploadProgress);
+  } catch (e: any) {
+    alert('上传失败：' + e.message);
+    setUploading(false);
+    return;
+  }
+  setUploading(false);
+  setUploadProgress(0);
+}
 
     const material: PracticeMaterial = {
-      id: db.generateId(),
-      topicId,
-      title,
-      type,
-      sourceLanguage,
-      targetLanguage: sourceLanguage === 'en' ? 'zh' : 'en',
-      interpretationType,
-      difficulty: showDifficulty ? difficulty : undefined,
-      sourceContent: sourceContent.trim() || undefined,
-      referenceTranslation: referenceTranslation.trim() || undefined,
-      mediaBlob,
-      createdAt: Date.now(),
-    };
+  id: db.generateId(),
+  topicId,
+  title,
+  type,
+  sourceLanguage,
+  targetLanguage: sourceLanguage === 'en' ? 'zh' : 'en',
+  interpretationType,
+  difficulty: showDifficulty ? difficulty : undefined,
+  sourceContent: sourceContent.trim() || undefined,
+  referenceTranslation: referenceTranslation.trim() || undefined,
+  mediaUrl,        // ← 用 URL 而不是 base64
+  mediaBlob: undefined,
+  createdAt: Date.now(),
+};
 
     await db.saveMaterial(material);
     onSave();
@@ -501,9 +510,13 @@ function MaterialImportModal({
           <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
             取消
           </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-            导入
-          </button>
+          <button
+  onClick={handleSave}
+  disabled={uploading}
+  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+>
+  {uploading ? `上传中 ${uploadProgress}%` : '导入'}
+</button>
         </div>
       </div>
     </div>

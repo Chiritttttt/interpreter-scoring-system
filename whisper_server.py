@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 print("正在加载 Whisper 模型，首次运行会自动下载...")
-model = whisper.load_model("small")
+model = whisper.load_model("small", device="cuda")
 print("模型加载完成！")
 
 @app.route('/health', methods=['GET'])
