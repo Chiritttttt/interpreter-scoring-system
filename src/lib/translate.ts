@@ -2,8 +2,7 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 // ── Whisper 服务地址（可在设置里修改）────────────────────────
 function getWhisperUrl(): string {
-  const base = localStorage.getItem('whisper_url') ?? 'http://localhost:5001';
-  return `${base.replace(/\/$/, '')}/transcribe`;
+  return 'https://bear-supervision-producer-when.trycloudflare.com/transcribe';
 }
 
 // ── DeepSeek API Key ──────────────────────────────────────────
