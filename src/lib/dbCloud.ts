@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 import type { Topic, PracticeMaterial, PracticeSession } from '../types';
 
-// ── 工具 ──────────────────────────────────────────────────────
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
@@ -11,6 +10,8 @@ async function getUserId(): Promise<string> {
   if (!user) throw new Error('未登录');
   return user.id;
 }
+
+export async function initDB() { return true; }
 
 // ── Topics ────────────────────────────────────────────────────
 
@@ -43,6 +44,12 @@ export async function deleteTopic(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function getTopic(id: string): Promise<Topic | undefined> {
+  const { data, error } = await supabase.from('topics').select('*').eq('id', id).single();
+  if (error) return undefined;
+  return { id: data.id, name: data.name, description: data.description ?? '', createdAt: data.created_at, updatedAt: data.updated_at };
+}
+
 // ── Materials ─────────────────────────────────────────────────
 
 export async function getAllMaterials(): Promise<PracticeMaterial[]> {
@@ -61,8 +68,9 @@ export async function getAllMaterials(): Promise<PracticeMaterial[]> {
     difficulty: r.difficulty,
     sourceContent: r.source_content,
     referenceTranslation: r.reference_translation,
-    mediaUrl: r.media_url, duration: r.duration,
-    createdAt: r.created_at,
+    mediaUrl: r.media_url,
+    mediaBlob: undefined,
+    duration: r.duration, createdAt: r.created_at,
   }));
 }
 
@@ -86,6 +94,21 @@ export async function saveMaterial(material: PracticeMaterial): Promise<void> {
 export async function deleteMaterial(id: string): Promise<void> {
   const { error } = await supabase.from('materials').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function getMaterial(id: string): Promise<PracticeMaterial | undefined> {
+  const { data, error } = await supabase.from('materials').select('*').eq('id', id).single();
+  if (error) return undefined;
+  return {
+    id: data.id, topicId: data.topic_id, title: data.title,
+    type: data.type, sourceLanguage: data.source_language,
+    targetLanguage: data.target_language,
+    interpretationType: data.interpretation_type,
+    difficulty: data.difficulty, sourceContent: data.source_content,
+    referenceTranslation: data.reference_translation,
+    mediaUrl: data.media_url, mediaBlob: undefined,
+    duration: data.duration, createdAt: data.created_at,
+  };
 }
 
 // ── Sessions ──────────────────────────────────────────────────
@@ -123,5 +146,13 @@ export async function deleteSession(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// initDB 保持兼容
-export async function initDB() { return true; }
+export async function getSessionsByMaterial(materialId: string): Promise<PracticeSession[]> {
+  const { data, error } = await supabase.from('sessions').select('*').eq('material_id', materialId);
+  if (error) return [];
+  return (data ?? []).map(r => ({
+    id: r.id, materialId: r.material_id, topicId: r.topic_id,
+    startedAt: r.started_at, completedAt: r.completed_at,
+    recordingBlob: r.recording_blob,
+    transcription: r.transcription, score: r.score,
+  }));
+}

@@ -1,13 +1,13 @@
-import { supabase, signOut } from './lib/supabase';
-import { AuthPage } from './components/AuthPage';
 import React, { useState, useEffect } from 'react';
-import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive } from 'lucide-react';
+import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive, LogOut } from 'lucide-react';
 import type { PracticeMaterial } from './types';
 import { TopicManager } from './components/TopicManager';
 import { PracticeSession } from './components/PracticeSession';
 import { HistoryView } from './components/HistoryView';
-import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession } from './lib/dbCloud.ts';
-import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive, LogOut } from 'lucide-react';
+import { AuthPage } from './components/AuthPage';
+import { supabase, signOut } from './lib/supabase';
+import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession } from './lib/dbCloud';
+
 type View = 'topics' | 'practice' | 'history' | 'settings';
 
 function App() {
@@ -18,25 +18,20 @@ function App() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
-  // 检查登录状态
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setUser(session?.user ?? null);
-    setAuthLoading(false);
-  });
-
-  // 监听登录状态变化
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    setUser(session?.user ?? null);
-  });
-
-  return () => subscription.unsubscribe();
-}, []);
-
-  useEffect(() => {
-  initDB().then(() => setIsLoading(false));
-}, []);
+    initDB().then(() => setIsLoading(false));
+  }, []);
 
   const handleSelectMaterial = (material: PracticeMaterial) => {
     setSelectedMaterial(material);
@@ -48,27 +43,16 @@ function App() {
     setCurrentView('topics');
   };
 
-  if (authLoading) {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white" />
-    </div>
-  );
-}
-
-if (!user) {
-  return <AuthPage onSuccess={() => {}} />;
-}
-
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white mx-auto mb-4" />
-          <p className="text-xl">加载中...</p>
-        </div>
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white" />
       </div>
     );
+  }
+
+  if (!user) {
+    return <AuthPage onSuccess={() => {}} />;
   }
 
   const navItems = [
@@ -118,26 +102,23 @@ if (!user) {
           </ul>
         </nav>
 
-        <div className="p-4 border-t border-indigo-500">
+        <div className="p-4 border-t border-indigo-500 space-y-2">
           <div className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl">
             <div className="p-2 bg-green-500 rounded-lg">
               <Mic className="w-4 h-4" />
             </div>
-            <div className="text-sm">
+            <div className="text-sm min-w-0">
               <div className="font-medium">AI 评分已启用</div>
-              <button
-  onClick={async () => {
-    await signOut();
-    setUser(null);
-  }}
-  className="w-full mt-2 flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl text-indigo-200 hover:bg-white/20 transition text-sm"
->
-  <LogOut className="w-4 h-4" />
-  <span>退出登录</span>
-</button>
-              <div className="text-indigo-200 text-xs">语音识别就绪</div>
+              <div className="text-indigo-200 text-xs truncate">{user.email}</div>
             </div>
           </div>
+          <button
+            onClick={async () => { await signOut(); setUser(null); }}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl text-indigo-200 hover:bg-white/20 transition text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>退出登录</span>
+          </button>
         </div>
       </aside>
 
@@ -169,7 +150,6 @@ if (!user) {
   );
 }
 
-// ── 精简后的设置页面 ──────────────────────────────────────────
 function SettingsView() {
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -180,26 +160,21 @@ function SettingsView() {
   useEffect(() => { loadStorageInfo(); }, []);
 
   async function loadStorageInfo() {
-  const [sessions, materials, topics] = await Promise.all([
-    getAllSessions(), getAllMaterials(), getAllTopics()
-  ]);
-  // 估算大小：只看 recordingBlob 和 mediaBlob 的字符串长度，不做完整序列化
-  let totalBytes = 0;
-  for (const s of sessions) {
-    if (s.recordingBlob) totalBytes += s.recordingBlob.length;
+    const [sessions, materials, topics] = await Promise.all([
+      getAllSessions(), getAllMaterials(), getAllTopics()
+    ]);
+    let totalBytes = 0;
+    for (const s of sessions) {
+      if (s.recordingBlob) totalBytes += s.recordingBlob.length;
+    }
+    setStorageInfo({
+      sessions: sessions.length,
+      materials: materials.length,
+      topics: topics.length,
+      estimatedMB: (totalBytes / 1024 / 1024).toFixed(1),
+    });
   }
-  for (const m of materials) {
-    if (m.mediaBlob) totalBytes += m.mediaBlob.length;
-  }
-  setStorageInfo({
-    sessions: sessions.length,
-    materials: materials.length,
-    topics: topics.length,
-    estimatedMB: (totalBytes / 1024 / 1024).toFixed(1),
-  });
-}
 
-  // 导出（不含音视频）
   async function handleExport() {
     setExportLoading(true);
     try {
@@ -207,82 +182,44 @@ function SettingsView() {
         getAllSessions(), getAllMaterials(), getAllTopics()
       ]);
       const data = {
-        version: '1.0',
-        exportedAt: new Date().toISOString(),
-        topics,
-        materials: materials.map(m => ({
-          ...m, mediaBlob: m.mediaBlob ? '[已省略]' : undefined,
-        })),
-        sessions: sessions.map(s => ({
-          ...s, recordingBlob: s.recordingBlob ? '[已省略]' : undefined,
-        })),
+        version: '1.0', exportedAt: new Date().toISOString(), topics,
+        materials: materials.map(m => ({ ...m, mediaBlob: undefined })),
+        sessions: sessions.map(s => ({ ...s, recordingBlob: undefined })),
       };
       download(JSON.stringify(data, null, 2), `口译练习备份_${today()}.json`, 'application/json');
     } catch (e) { alert('导出失败：' + e); }
     finally { setExportLoading(false); }
   }
 
-  // 完整导出（含录音，文件较大）
-  async function handleExportFull() {
-  if (!confirm('完整备份包含所有录音文件，数据量可能较大，导出时请勿操作页面，确定继续吗？')) return;
-  setExportLoading(true);
-  try {
-    const [sessions, materials, topics] = await Promise.all([
-      getAllSessions(), getAllMaterials(), getAllTopics()
-    ]);
-    // 分批构建，避免一次性 stringify 大对象
-    const chunks: string[] = [];
-    chunks.push(`{"version":"1.0-full","exportedAt":"${new Date().toISOString()}",`);
-    chunks.push(`"topics":${JSON.stringify(topics)},`);
-    chunks.push(`"materials":${JSON.stringify(materials)},`);
-    chunks.push('"sessions":[');
-    for (let i = 0; i < sessions.length; i++) {
-      chunks.push(JSON.stringify(sessions[i]));
-      if (i < sessions.length - 1) chunks.push(',');
-    }
-    chunks.push(']}');
-    const blob = new Blob(chunks, { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `口译练习完整备份_${today()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) { alert('导出失败：' + e); }
-  finally { setExportLoading(false); }
-}
-
-  // 导入
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm('导入将合并到现有数据（不覆盖同名），确定继续吗？')) return;
+    if (!confirm('导入将合并到现有数据，确定继续吗？')) return;
     setImportLoading(true);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
       let count = 0;
       for (const t of data.topics   ?? []) { await saveTopic(t);   count++; }
-      for (const m of data.materials ?? []) {
-        if (m.mediaBlob === '[已省略]') m.mediaBlob = undefined;
-        await saveMaterial(m); count++;
-      }
-      for (const s of data.sessions  ?? []) {
-        if (s.recordingBlob === '[已省略]') s.recordingBlob = undefined;
-        await saveSession(s); count++;
-      }
+      for (const m of data.materials ?? []) { await saveMaterial(m); count++; }
+      for (const s of data.sessions  ?? []) { await saveSession(s);  count++; }
       await loadStorageInfo();
       alert(`导入成功，共 ${count} 条记录`);
-    } catch (e) { alert('导入失败，请检查文件格式：' + e); }
+    } catch (e) { alert('导入失败：' + e); }
     finally { setImportLoading(false); e.target.value = ''; }
   }
 
   async function handleClearData() {
     if (!confirm('确定要清除所有数据吗？此操作不可撤销！')) return;
     if (!confirm('再次确认：将删除所有主题、材料和练习记录，是否继续？')) return;
-    const dbs = await indexedDB.databases();
-    for (const d of dbs) { if (d.name) indexedDB.deleteDatabase(d.name); }
-    window.location.reload();
+    const [sessions, materials, topics] = await Promise.all([
+      getAllSessions(), getAllMaterials(), getAllTopics()
+    ]);
+    for (const s of sessions)  await (await import('./lib/dbCloud')).deleteSession(s.id);
+    for (const m of materials) await (await import('./lib/dbCloud')).deleteMaterial(m.id);
+    for (const t of topics)    await (await import('./lib/dbCloud')).deleteTopic(t.id);
+    await loadStorageInfo();
+    alert('数据已清除');
   }
 
   function download(content: string, filename: string, type: string) {
@@ -302,7 +239,6 @@ function SettingsView() {
       <div className="max-w-xl mx-auto space-y-6">
         <h2 className="text-2xl font-bold text-gray-800">设置</h2>
 
-        {/* 存储信息 */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <HardDrive className="w-5 h-5 text-indigo-500" /> 数据存储
@@ -314,7 +250,7 @@ function SettingsView() {
                 { label: '主题',     value: storageInfo.topics    },
                 { label: '练习材料', value: storageInfo.materials },
                 { label: '练习记录', value: storageInfo.sessions  },
-                { label: '占用估算', value: `${storageInfo.estimatedMB}MB` },
+                { label: '录音占用', value: `${storageInfo.estimatedMB}MB` },
               ].map(item => (
                 <div key={item.label} className="bg-gray-50 rounded-lg p-3 text-center">
                   <div className="text-lg font-bold text-gray-800">{item.value}</div>
@@ -324,36 +260,15 @@ function SettingsView() {
             </div>
           )}
 
-          <p className="text-xs text-gray-400 mb-4">
-            数据保存在浏览器 IndexedDB 中，仅存于本机。可通过导出备份到任意位置，导入时合并恢复。
-          </p>
-
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
                 <div className="text-sm font-medium text-gray-700">导出备份</div>
-                <div className="text-xs text-gray-400">不含音视频文件，文件小</div>
+                <div className="text-xs text-gray-400">不含音视频和录音文件</div>
               </div>
-              <button
-                onClick={handleExport}
-                disabled={exportLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm disabled:opacity-50"
-              >
+              <button onClick={handleExport} disabled={exportLoading}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm disabled:opacity-50">
                 <Download className="w-4 h-4" /> {exportLoading ? '导出中…' : '导出'}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <div className="text-sm font-medium text-gray-700">完整备份</div>
-                <div className="text-xs text-gray-400">含录音文件，文件较大</div>
-              </div>
-              <button
-                onClick={handleExportFull}
-                disabled={exportLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" /> {exportLoading ? '导出中…' : '完整导出'}
               </button>
             </div>
 
@@ -370,7 +285,6 @@ function SettingsView() {
           </div>
         </div>
 
-        {/* 清除数据 */}
         <div className="bg-white rounded-xl border border-red-200 p-6">
           <h3 className="text-base font-semibold text-red-600 mb-3 flex items-center gap-2">
             <Trash2 className="w-5 h-5" /> 危险操作
@@ -378,7 +292,7 @@ function SettingsView() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-gray-800">清除所有数据</div>
-              <div className="text-xs text-gray-500">删除所有主题、材料和练习记录，不可撤销</div>
+              <div className="text-xs text-gray-500">删除当前账号的所有数据，不可撤销</div>
             </div>
             <button onClick={handleClearData} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
               清除数据
@@ -386,7 +300,6 @@ function SettingsView() {
           </div>
         </div>
 
-        {/* 关于 */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-base font-semibold text-gray-800 mb-3">关于</h3>
           <div className="text-sm text-gray-500 space-y-1">
@@ -396,7 +309,6 @@ function SettingsView() {
             <p>基于 AIIC 评分标准（内容 / 表达 / 技巧）</p>
           </div>
         </div>
-
       </div>
     </div>
   );

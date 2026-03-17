@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Folder, Trash2, Edit2, FileText, AudioLines, Video } from 'lucide-react';
 import type { Topic, PracticeMaterial } from '../types';
-import * as db from '../lib/dbCloud.ts';
+import * as db from '../lib/dbCloud';
 import { uploadMediaToOSS } from '../lib/storage';
 
 interface Props {

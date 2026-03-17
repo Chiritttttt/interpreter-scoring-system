@@ -5,7 +5,7 @@ import {
   BookOpen, Mic2, Lightbulb, X
 } from 'lucide-react';
 import type { PracticeSession, PracticeMaterial, Topic } from '../types';
-import * as db from '../lib/dbCloud.ts';
+import * as db from '../lib/dbCloud';
 import { getGrade } from '../lib/scoring';
 
 export function HistoryView() {

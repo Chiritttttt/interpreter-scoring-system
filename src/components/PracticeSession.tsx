@@ -7,7 +7,7 @@ import type { PracticeMaterial, PracticeSession as Session, ScoreResult } from '
 import { AudioRecorder, blobToBase64 } from '../lib/recorder';
 import { SpeechRecognizer, TextToSpeech, whisperTranscribe } from '../lib/speech';
 import { calculateScore, buildScoreFromAI } from '../lib/scoring';
-import * as db from '../lib/dbCloud.ts';
+import * as db from '../lib/dbCloud';
 import { ScoreDisplay } from './ScoreDisplay';
 import { AutoPauseController } from '../lib/autoPause';
 import {
