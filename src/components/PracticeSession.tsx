@@ -322,7 +322,7 @@ export function PracticeSession({ material, onBack }: Props) {
 
     setState('playing');
     const mediaEl = material.type === 'audio' ? mediaAudioRef.current : mediaVideoRef.current;
-    if (mediaEl && material.mediaBlob) {
+    if (mediaEl && (material.mediaUrl || material.mediaBlob)) {
       mediaEl.src = material.mediaUrl || material.mediaBlob || '';
       await mediaEl.play();
 
