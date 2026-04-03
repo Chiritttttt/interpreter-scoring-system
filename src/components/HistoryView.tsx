@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   History, Calendar, Award, TrendingUp, Trash2,
   Play, ChevronDown, ChevronUp, Download, Volume2,
-  BookOpen, Mic2, Lightbulb, X
+  BookOpen, Mic2, Lightbulb, Timer
 } from 'lucide-react';
 import type { PracticeSession, PracticeMaterial, Topic } from '../types';
 import * as db from '../lib/dbCloud';
@@ -101,7 +101,7 @@ export function HistoryView() {
             { icon: <Calendar className="w-5 h-5" />, label: '总练习次数', value: sessions.length.toString(), color: 'bg-blue-500' },
             { icon: <Award className="w-5 h-5" />,    label: '完成评分',   value: completed.length.toString(), color: 'bg-green-500' },
             { icon: <TrendingUp className="w-5 h-5" />,label: '平均得分',   value: avgScore.toString(), color: 'bg-purple-500' },
-            { icon: <Play className="w-5 h-5" />,     label: '总练习时长', value: `${totalMin} 分钟`, color: 'bg-orange-500' },
+            { icon: <Timer className="w-5 h-5" />,     label: '总练习时长', value: `${totalMin} 分钟`, color: 'bg-orange-500' },
           ].map(c => (
             <div key={c.label} className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
               <div className={`p-3 rounded-lg ${c.color} text-white`}>{c.icon}</div>

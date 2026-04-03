@@ -1,23 +1,33 @@
 import React from 'react';
 
-const searilizeError = (error: any) => {
+const serializeError = (error: unknown) => {
   if (error instanceof Error) {
     return error.message + '\n' + error.stack;
   }
   return JSON.stringify(error, null, 2);
 };
 
-export class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: any }
-> {
-  constructor(props: { children: React.ReactNode }) {
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: unknown;
+}
+
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: unknown) {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
   render() {
@@ -25,7 +35,7 @@ export class ErrorBoundary extends React.Component<
       return (
         <div className="p-4 border border-red-500 rounded">
           <h2 className="text-red-500">Something went wrong.</h2>
-          <pre className="mt-2 text-sm">{searilizeError(this.state.error)}</pre>
+          <pre className="mt-2 text-sm">{serializeError(this.state.error)}</pre>
         </div>
       );
     }

@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.env.local
+.env.*.local

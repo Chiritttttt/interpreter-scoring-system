@@ -2,17 +2,24 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 // ── Whisper 服务地址（可在设置里修改）────────────────────────
 function getWhisperUrl(): string {
-  return 'https://bear-supervision-producer-when.trycloudflare.com/transcribe';
+  return import.meta.env.VITE_WHISPER_URL || 'http://localhost:5001/transcribe';
 }
 
 // ── DeepSeek API Key ──────────────────────────────────────────
+// NOTE: Reading API keys from environment variables is preferred.
+// The localStorage fallback exists for user-configured keys in production,
+// but storing secrets in localStorage is not secure — keys are visible
+// to any script on the page. Use environment variables whenever possible.
 export function getDeepSeekKey(): string {
-  return (import.meta as any).env?.VITE_DEEPSEEK_API_KEY
+  return import.meta.env.VITE_DEEPSEEK_API_KEY
     || localStorage.getItem('deepseek_api_key')
     || '';
 }
 export function setDeepSeekKey(key: string) {
   localStorage.setItem('deepseek_api_key', key);
+}
+export function removeDeepSeekKey() {
+  localStorage.removeItem('deepseek_api_key');
 }
 
 // ── Whisper 本地转录 ──────────────────────────────────────────

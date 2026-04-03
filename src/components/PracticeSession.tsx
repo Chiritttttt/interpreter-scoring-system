@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, Play, Mic, Square, RefreshCw,
-  Volume2, Eye, EyeOff, Clock, AlertCircle, SendHorizonal
+  Volume2, Eye, EyeOff, Clock, AlertCircle, SendHorizonal, KeyRound
 } from 'lucide-react';
 import type { PracticeMaterial, PracticeSession as Session, ScoreResult } from '../types';
 import { AudioRecorder, blobToBase64 } from '../lib/recorder';
@@ -55,6 +55,8 @@ export function PracticeSession({ material, onBack }: Props) {
   const [whisperStep, setWhisperStep] = useState('');
   const [generatedReference, setGeneratedReference] = useState('');
   const [segmentCount, setSegmentCount] = useState(0);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
 
   const countdownRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const resumeAtRef       = useRef<number>(0);
@@ -74,6 +76,7 @@ export function PracticeSession({ material, onBack }: Props) {
   const audioUrlRef       = useRef<string | null>(null);
   const whisperLoadingRef = useRef(false);
   whisperLoadingRef.current = whisperLoading;
+  const pendingSubmitRef  = useRef(false);
 
   useEffect(() => {
     recorderRef.current   = new AudioRecorder();
@@ -114,10 +117,10 @@ export function PracticeSession({ material, onBack }: Props) {
     try {
       await recorderRef.current?.start();
       recognizerRef.current?.start(
-        (text) => setTranscription(text),
+        (text, isFinal) => { if (isFinal) setTranscription(text); },
         (err) => console.error('语音识别错误:', err)
       );
-    } catch { alert('无法启动录音，请确保已授予麦克风权限'); }
+    } catch (e) { console.error('无法启动录音，请确保已授予麦克风权限', e); }
   }, []);
 
   const handleAutoResume = useCallback(async () => {
@@ -173,10 +176,10 @@ export function PracticeSession({ material, onBack }: Props) {
       await recorderRef.current?.start();
       setState('recording');
       recognizerRef.current?.start(
-        (text) => setTranscription(text),
+        (text, isFinal) => { if (isFinal) setTranscription(text); },
         (err) => console.error('语音识别错误:', err)
       );
-    } catch { alert('无法启动录音，请确保已授予麦克风权限'); }
+    } catch (e) { console.error('无法启动录音，请确保已授予麦克风权限', e); }
   };
 
   const stopRecording = async () => {
@@ -187,8 +190,28 @@ export function PracticeSession({ material, onBack }: Props) {
     setState('playing');
   };
 
+  const handleApiKeySubmit = () => {
+    if (apiKeyInput.trim()) {
+      setDeepSeekKey(apiKeyInput.trim());
+      setShowApiKeyModal(false);
+      setApiKeyInput('');
+      if (pendingSubmitRef.current) {
+        pendingSubmitRef.current = false;
+        submitScore();
+      }
+    }
+  };
+
   const submitScore = async () => {
     if (!session) return;
+
+    // Check for DeepSeek API key before proceeding
+    if (!getDeepSeekKey() && !material.referenceTranslation) {
+      setShowApiKeyModal(true);
+      pendingSubmitRef.current = true;
+      return;
+    }
+
     if (stateRef.current === 'recording' || stateRef.current === 'auto-paused') {
       await _stopAndSaveRecording();
     }
@@ -222,10 +245,6 @@ export function PracticeSession({ material, onBack }: Props) {
 
       // 第二步：生成参考译文
       if (!finalReference) {
-        if (!getDeepSeekKey()) {
-          const key = prompt('请输入 DeepSeek API Key：');
-          if (key) setDeepSeekKey(key);
-        }
         if (getDeepSeekKey()) {
           if (!sourceTextForAI && material.mediaBlob) {
             setWhisperStep('whisper-source');
@@ -633,6 +652,56 @@ export function PracticeSession({ material, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <KeyRound className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">需要 DeepSeek API Key</h3>
+                <p className="text-sm text-gray-500">用于生成参考译文和 AI 评分</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="请输入 DeepSeek API Key"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleApiKeySubmit(); }}
+                autoFocus
+              />
+              <p className="text-xs text-gray-400">
+                Key 将保存在本地浏览器中，不会上传到服务器。也可以跳过，使用基础评分。
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => {
+                  setShowApiKeyModal(false);
+                  setApiKeyInput('');
+                  pendingSubmitRef.current = false;
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                跳过
+              </button>
+              <button
+                onClick={handleApiKeySubmit}
+                disabled={!apiKeyInput.trim()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm"
+              >
+                确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

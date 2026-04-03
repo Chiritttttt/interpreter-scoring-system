@@ -345,34 +345,34 @@ function MaterialImportModal({
     }
 
     let mediaUrl: string | undefined;
-if (mediaFile) {
-  setUploading(true);
-  try {
-    mediaUrl = await uploadMediaToOSS(mediaFile, setUploadProgress);
-  } catch (e: any) {
-    alert('上传失败：' + e.message);
-    setUploading(false);
-    return;
-  }
-  setUploading(false);
-  setUploadProgress(0);
-}
+    if (mediaFile) {
+      setUploading(true);
+      try {
+        mediaUrl = await uploadMediaToOSS(mediaFile, setUploadProgress);
+      } catch (e: any) {
+        alert('上传失败：' + e.message);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+      setUploadProgress(0);
+    }
 
     const material: PracticeMaterial = {
-  id: db.generateId(),
-  topicId,
-  title,
-  type,
-  sourceLanguage,
-  targetLanguage: sourceLanguage === 'en' ? 'zh' : 'en',
-  interpretationType,
-  difficulty: showDifficulty ? difficulty : undefined,
-  sourceContent: sourceContent.trim() || undefined,
-  referenceTranslation: referenceTranslation.trim() || undefined,
-  mediaUrl,        // ← 用 URL 而不是 base64
-  mediaBlob: undefined,
-  createdAt: Date.now(),
-};
+      id: db.generateId(),
+      topicId,
+      title,
+      type,
+      sourceLanguage,
+      targetLanguage: sourceLanguage === 'en' ? 'zh' : 'en',
+      interpretationType,
+      difficulty: showDifficulty ? difficulty : undefined,
+      sourceContent: sourceContent.trim() || undefined,
+      referenceTranslation: referenceTranslation.trim() || undefined,
+      mediaUrl,
+      mediaBlob: undefined,
+      createdAt: Date.now(),
+    };
 
     await db.saveMaterial(material);
     onSave();
@@ -401,7 +401,7 @@ if (mediaFile) {
               <label className="block text-sm font-medium text-gray-700 mb-1">材料类型</label>
               <select
                 value={type}
-                onChange={(e) => setType(e.target.value as any)}
+                onChange={(e) => setType(e.target.value as 'text' | 'audio' | 'video')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="audio">音频</option>
@@ -413,7 +413,7 @@ if (mediaFile) {
               <label className="block text-sm font-medium text-gray-700 mb-1">口译模式</label>
               <select
                 value={interpretationType}
-                onChange={(e) => setInterpretationType(e.target.value as any)}
+                onChange={(e) => setInterpretationType(e.target.value as 'consecutive' | 'simultaneous' | 'sight' | 'self-paced')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="consecutive">交替传译</option>
@@ -437,7 +437,7 @@ if (mediaFile) {
               <label className="block text-sm font-medium text-gray-700 mb-1">源语言</label>
               <select
                 value={sourceLanguage}
-                onChange={(e) => setSourceLanguage(e.target.value as any)}
+                onChange={(e) => setSourceLanguage(e.target.value as 'en' | 'zh')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="en">英语</option>
@@ -511,12 +511,12 @@ if (mediaFile) {
             取消
           </button>
           <button
-  onClick={handleSave}
-  disabled={uploading}
-  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
->
-  {uploading ? `上传中 ${uploadProgress}%` : '导入'}
-</button>
+            onClick={handleSave}
+            disabled={uploading}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {uploading ? `上传中 ${uploadProgress}%` : '导入'}
+          </button>
         </div>
       </div>
     </div>

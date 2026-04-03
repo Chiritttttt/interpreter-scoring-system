@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import whisper
+import torch
 import tempfile
 import os
 
@@ -8,7 +9,9 @@ app = Flask(__name__)
 CORS(app)
 
 print("正在加载 Whisper 模型，首次运行会自动下载...")
-model = whisper.load_model("small", device="cuda")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"使用设备: {device}")
+model = whisper.load_model("small", device=device)
 print("模型加载完成！")
 
 @app.route('/health', methods=['GET'])

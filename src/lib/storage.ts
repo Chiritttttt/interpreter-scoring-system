@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 /**
  * OSS 上传凭证
@@ -15,9 +15,14 @@ interface OSSCredentials {
 }
 
 /**
- * 获取 OSS 上传凭证
+ * 获取 OSS 上传凭证（带缓存，自动刷新即将过期的凭证）
  */
 async function getOSSCredentials(): Promise<OSSCredentials> {
+  // 如果有缓存的凭证且未过期（距离过期还有超过 60 秒），直接复用
+  if (StorageService.cachedCredentials && StorageService.credentialsExpireAt > Date.now() + 60_000) {
+    return StorageService.cachedCredentials;
+  }
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('未登录');
 
@@ -36,7 +41,11 @@ async function getOSSCredentials(): Promise<OSSCredentials> {
     throw new Error(err?.error ?? `获取凭证失败 (${response.status})`);
   }
 
-  return response.json();
+  const credentials = await response.json();
+  // 缓存凭证及其过期时间
+  StorageService.cachedCredentials = credentials;
+  StorageService.credentialsExpireAt = new Date(credentials.expiration).getTime();
+  return credentials;
 }
 
 /**
@@ -182,10 +191,13 @@ async function simpleUpload(
 
 /**
  * 分片上传（大文件，>=5MB）
+ *
+ * 每个分片上传前会调用 getOSSCredentials() 确保凭证有效。
+ * 如果 STS token 即将过期（<60s），会自动刷新。
  */
 async function multipartUpload(
   file: File,
-  credentials: OSSCredentials,
+  initialCredentials: OSSCredentials,
   endpoint: string,
   objectKey: string,
   resource: string,
@@ -198,6 +210,7 @@ async function multipartUpload(
   onProgress?.(10);
 
   // 1. 初始化分片上传
+  const credentials = initialCredentials;
   const initDate = new Date().toUTCString();
   const initResource = `/${credentials.bucket}/${objectKey}?uploads`;
   const initSignature = await generateOSSSignature(
@@ -236,26 +249,29 @@ async function multipartUpload(
   let uploadedBytes = 0;
 
   for (let i = 0; i < totalChunks; i++) {
+    // 每个分片上传前确保凭证有效（自动刷新即将过期的凭证）
+    const currentCredentials = await getOSSCredentials();
+
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const chunk = file.slice(start, end);
     const partNumber = i + 1;
 
     const chunkDate = new Date().toUTCString();
-    const chunkResource = `/${credentials.bucket}/${objectKey}?partNumber=${partNumber}&uploadId=${uploadId}`;
+    const chunkResource = `/${currentCredentials.bucket}/${objectKey}?partNumber=${partNumber}&uploadId=${uploadId}`;
     const chunkSignature = await generateOSSSignature(
       'PUT', contentType, chunkDate, chunkResource,
-      credentials.accessKeySecret, credentials.securityToken
+      currentCredentials.accessKeySecret, currentCredentials.securityToken
     );
 
     const chunkHeaders: Record<string, string> = {
       'Content-Type': contentType,
       'Date': chunkDate,
-      'Authorization': `OSS ${credentials.accessKeyId}:${chunkSignature}`,
+      'Authorization': `OSS ${currentCredentials.accessKeyId}:${chunkSignature}`,
     };
 
-    if (credentials.securityToken) {
-      chunkHeaders['x-oss-security-token'] = credentials.securityToken;
+    if (currentCredentials.securityToken) {
+      chunkHeaders['x-oss-security-token'] = currentCredentials.securityToken;
     }
 
     const chunkResponse = await fetch(
@@ -277,12 +293,13 @@ async function multipartUpload(
     onProgress?.(progress);
   }
 
-  // 3. 完成分片上传
+  // 3. 完成分片上传（使用最新凭证）
+  const finalCredentials = await getOSSCredentials();
   const completeDate = new Date().toUTCString();
-  const completeResource = `/${credentials.bucket}/${objectKey}?uploadId=${uploadId}`;
+  const completeResource = `/${finalCredentials.bucket}/${objectKey}?uploadId=${uploadId}`;
   const completeSignature = await generateOSSSignature(
     'POST', 'application/xml', completeDate, completeResource,
-    credentials.accessKeySecret, credentials.securityToken
+    finalCredentials.accessKeySecret, finalCredentials.securityToken
   );
 
   const completeBody = `<?xml version="1.0" encoding="UTF-8"?>
@@ -293,11 +310,11 @@ ${parts.map(p => `  <Part><PartNumber>${p.partNumber}</PartNumber><ETag>"${p.eta
   const completeHeaders: Record<string, string> = {
     'Content-Type': 'application/xml',
     'Date': completeDate,
-    'Authorization': `OSS ${credentials.accessKeyId}:${completeSignature}`,
+    'Authorization': `OSS ${finalCredentials.accessKeyId}:${completeSignature}`,
   };
 
-  if (credentials.securityToken) {
-    completeHeaders['x-oss-security-token'] = credentials.securityToken;
+  if (finalCredentials.securityToken) {
+    completeHeaders['x-oss-security-token'] = finalCredentials.securityToken;
   }
 
   const completeResponse = await fetch(
@@ -311,4 +328,12 @@ ${parts.map(p => `  <Part><PartNumber>${p.partNumber}</PartNumber><ETag>"${p.eta
 
   onProgress?.(100);
   return `${endpoint}/${objectKey}`;
+}
+
+/**
+ * StorageService — 提供 STS 凭证缓存的静态容器
+ */
+class StorageService {
+  private static cachedCredentials: OSSCredentials | null = null;
+  private static credentialsExpireAt: number = 0;
 }

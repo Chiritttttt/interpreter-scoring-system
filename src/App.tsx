@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Languages, BookOpen, History, Settings, Mic, Menu, Download, Upload, Trash2, HardDrive, LogOut } from 'lucide-react';
 import type { PracticeMaterial } from './types';
+import type { User } from '@supabase/supabase-js';
 import { TopicManager } from './components/TopicManager';
 import { PracticeSession } from './components/PracticeSession';
 import { HistoryView } from './components/HistoryView';
 import { AuthPage } from './components/AuthPage';
 import { supabase, signOut } from './lib/supabase';
-import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession } from './lib/dbCloud';
+import { initDB, getAllSessions, getAllMaterials, getAllTopics, saveTopic, saveMaterial, saveSession, deleteTopic, deleteMaterial, deleteSession } from './lib/dbCloud';
 
 type View = 'topics' | 'practice' | 'history' | 'settings';
 
@@ -15,7 +16,7 @@ function App() {
   const [selectedMaterial, setSelectedMaterial] = useState<PracticeMaterial | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ function App() {
   }
 
   if (!user) {
-    return <AuthPage onSuccess={() => {}} />;
+    return <AuthPage />;
   }
 
   const navItems = [
@@ -156,6 +157,9 @@ function SettingsView() {
   const [storageInfo, setStorageInfo] = useState<{
     sessions: number; materials: number; topics: number; estimatedMB: string;
   } | null>(null);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [importCount, setImportCount] = useState(0);
+  const [clearSuccess, setClearSuccess] = useState(false);
 
   useEffect(() => { loadStorageInfo(); }, []);
 
@@ -165,7 +169,11 @@ function SettingsView() {
     ]);
     let totalBytes = 0;
     for (const s of sessions) {
-      if (s.recordingBlob) totalBytes += s.recordingBlob.length;
+      if (s.recordingBlob) {
+        // Base64 uses 4 chars per 3 bytes, minus data URL prefix
+        const base64Data = s.recordingBlob.replace(/^data:[^;]+;base64,/, '');
+        totalBytes += Math.floor(base64Data.length * 3 / 4);
+      }
     }
     setStorageInfo({
       sessions: sessions.length,
@@ -187,7 +195,7 @@ function SettingsView() {
         sessions: sessions.map(s => ({ ...s, recordingBlob: undefined })),
       };
       download(JSON.stringify(data, null, 2), `口译练习备份_${today()}.json`, 'application/json');
-    } catch (e) { alert('导出失败：' + e); }
+    } catch (e) { console.error('导出失败：', e); }
     finally { setExportLoading(false); }
   }
 
@@ -196,6 +204,7 @@ function SettingsView() {
     if (!file) return;
     if (!confirm('导入将合并到现有数据，确定继续吗？')) return;
     setImportLoading(true);
+    setImportSuccess(false);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
@@ -204,8 +213,9 @@ function SettingsView() {
       for (const m of data.materials ?? []) { await saveMaterial(m); count++; }
       for (const s of data.sessions  ?? []) { await saveSession(s);  count++; }
       await loadStorageInfo();
-      alert(`导入成功，共 ${count} 条记录`);
-    } catch (e) { alert('导入失败：' + e); }
+      setImportCount(count);
+      setImportSuccess(true);
+    } catch (e) { console.error('导入失败：', e); }
     finally { setImportLoading(false); e.target.value = ''; }
   }
 
@@ -215,11 +225,11 @@ function SettingsView() {
     const [sessions, materials, topics] = await Promise.all([
       getAllSessions(), getAllMaterials(), getAllTopics()
     ]);
-    for (const s of sessions)  await (await import('./lib/dbCloud')).deleteSession(s.id);
-    for (const m of materials) await (await import('./lib/dbCloud')).deleteMaterial(m.id);
-    for (const t of topics)    await (await import('./lib/dbCloud')).deleteTopic(t.id);
+    for (const s of sessions)  await deleteSession(s.id);
+    for (const m of materials) await deleteMaterial(m.id);
+    for (const t of topics)    await deleteTopic(t.id);
     await loadStorageInfo();
-    alert('数据已清除');
+    setClearSuccess(true);
   }
 
   function download(content: string, filename: string, type: string) {
@@ -238,6 +248,18 @@ function SettingsView() {
     <div className="h-full overflow-y-auto bg-gray-50 p-6">
       <div className="max-w-xl mx-auto space-y-6">
         <h2 className="text-2xl font-bold text-gray-800">设置</h2>
+
+        {importSuccess && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-700 text-sm">
+            导入成功，共 {importCount} 条记录
+          </div>
+        )}
+
+        {clearSuccess && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-700 text-sm">
+            数据已清除
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">

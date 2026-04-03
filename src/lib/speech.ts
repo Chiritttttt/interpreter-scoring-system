@@ -2,10 +2,13 @@ import { transcribeAudio } from './translate';
 
 // ── Web Speech API 实时转写 ───────────────────────────────────
 
+const MAX_RESTART_COUNT = 10;
+
 export class SpeechRecognizer {
   private recognition: SpeechRecognition | null = null;
   private isListening: boolean = false;
   private transcript: string = '';
+  private restartCount: number = 0;
 
   constructor(language: 'en-US' | 'zh-CN' = 'zh-CN') {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -31,6 +34,7 @@ export class SpeechRecognizer {
       return;
     }
     this.transcript = '';
+    this.restartCount = 0;
 
     this.recognition.onresult = (event) => {
       let interimTranscript = '';
@@ -54,7 +58,15 @@ export class SpeechRecognizer {
     };
 
     this.recognition.onend = () => {
-      if (this.isListening) this.recognition?.start();
+      if (this.isListening) {
+        this.restartCount++;
+        if (this.restartCount > MAX_RESTART_COUNT) {
+          this.isListening = false;
+          console.warn(`语音识别自动重启次数已达上限 (${MAX_RESTART_COUNT})，已停止尝试`);
+          return;
+        }
+        this.recognition?.start();
+      }
     };
 
     this.isListening = true;

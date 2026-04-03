@@ -153,6 +153,11 @@ export class AutoPauseController {
       this.audio.play().catch(() => {});
       // 恢复后安排下一次
       this._scheduleNextWindow();
+      // 防止窗口落在当前时间之前（例如长时间暂停后播放位置已超过调度窗口）
+      if (this.windowStart < this.audio.currentTime) {
+        this.windowStart = this.audio.currentTime + 5;
+        this.windowEnd = this.windowStart + 15;
+      }
       this.isWatching = true;
       this.silenceStart = null;
       this._watchLoop();

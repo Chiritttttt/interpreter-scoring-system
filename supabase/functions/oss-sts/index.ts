@@ -1,18 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Max-Age": "86400",
-};
+const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS")?.split(",") || [];
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || "";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 serve(async (req) => {
   // 处理 OPTIONS 预检请求（关键！）
   if (req.method === "OPTIONS") {
     return new Response("ok", {
-      headers: corsHeaders,
+      headers: getCorsHeaders(req),
       status: 204  // 204 No Content 是最合适的
     });
   }
@@ -23,7 +29,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "未授权" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -39,7 +45,7 @@ serve(async (req) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "无效的认证信息" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -53,7 +59,14 @@ serve(async (req) => {
     if (!accessKeyId || !accessKeySecret || !bucket || !region) {
       return new Response(JSON.stringify({ error: "OSS 配置不完整" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+      });
+    }
+
+    if (!roleArn) {
+      return new Response(JSON.stringify({ error: "OSS_ROLE_ARN 未配置，无法安全发放 STS 凭证" }), {
+        status: 500,
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -76,14 +89,14 @@ serve(async (req) => {
       bucket: bucket,
       endpoint: endpoint,  // 返回完整的 endpoint
     }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (e) {
     console.error("STS 错误:", e);
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
@@ -91,21 +104,10 @@ serve(async (req) => {
 async function getSTSCredentials(
   accessKeyId: string,
   accessKeySecret: string,
-  roleArn: string | undefined,
+  roleArn: string,
   bucket: string,
   userId: string
 ) {
-  // 如果没有配置 RAM 角色，返回警告并继续（不推荐生产环境使用）
-  if (!roleArn) {
-    console.warn("警告：未配置 OSS_ROLE_ARN，使用主 AccessKey（不安全）");
-    return {
-      AccessKeyId: accessKeyId,
-      AccessKeySecret: accessKeySecret,
-      SecurityToken: "",
-      Expiration: new Date(Date.now() + 3600 * 1000).toISOString(),
-    };
-  }
-
   // 使用阿里云官方 STS 端点
   const stsEndpoint = "https://sts.aliyuncs.com";
 
@@ -133,9 +135,7 @@ async function getSTSCredentials(
             "oss:ListObjects"
           ],
           Resource: [
-            `acs:oss:*:*:${bucket}`,
-            `acs:oss:*:*:${bucket}/*`,
-            `acs:oss:*:*:${bucket}/uploads/${userId}/*`  // 限制只能上传到自己的目录
+            `acs:oss:*:*:${bucket}/uploads/${userId}/*`
           ],
         },
       ],
